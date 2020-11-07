@@ -1,2 +1,8 @@
 # ML_VS_REML
-Linear Mixed Model via Restricted Maximum Likelihood (REML)
+*Modèles linéaires mixtes à traver le maximum de vraisemblance restreint*
+
+Dans ce rapport vous trouverez:
+
+* Un rapport expliquant le principe de l'estimateur REML
+* Une présentation beamer du sujet
+* Une vidéo explicative
