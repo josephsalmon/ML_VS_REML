@@ -1,5 +1,5 @@
 # ML_VS_REML
-*Modèles linéaires mixtes à traver le maximum de vraisemblance restreint*
+*Modèles linéaires mixtes à travers le maximum de vraisemblance restreint*
 
 Dans ce rapport vous trouverez:
 
