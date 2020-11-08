@@ -5,4 +5,6 @@ Dans ce rapport vous trouverez:
 
 * Un rapport expliquant le principe de l'estimateur REML
 * Une présentation beamer du sujet
-* Une vidéo explicative
+* Une vidéo explicative en suivant ce lien : https://youtu.be/_kExxCZY21k
+
+
