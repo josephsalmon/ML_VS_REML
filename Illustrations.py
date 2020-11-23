@@ -1,132 +1,160 @@
-from scipy.integrate import quad
-import matplotlib.pyplot as plt
-import scipy.stats
+# import itertools
+# from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
-import pandas as pd
-import patsy
-import statsmodels.api as sm
-import statsmodels.formula.api as smf
-from statsmodels.tools.sm_exceptions import ConvergenceWarning
+import matplotlib.pyplot as plt
+# from subprocess import call
+import os
 
-### Construction du graphique des deux gaussiennes
+save = True
+np.random.seed(44)
 
-x_min = -5.0
-x_max = 10
-
-mean = 0 
-std = 1.0
-
-mean2 = 1.0
-std2 = 2.0
-
-x = np.linspace(x_min, x_max, 100)
-
-y1 = scipy.stats.norm.pdf(x,mean,std)
-y2 = scipy.stats.norm.pdf(x,mean2,std2)
-
-plt.plot(x,y1, color='coral', label = 'distribution normale centrée réduite')
-plt.plot(x,y2, color='blue', label = 'distribution avec des estimateurs biaisés')
-
-plt.grid()
-
-plt.xlim(x_min,x_max)
-plt.ylim(0,0.5)
-
-plt.title('Comparaison de deux gaussiennes',fontsize=10)
-
-plt.legend()
-
-plt.xlabel('x')
-plt.ylabel('Densité')
-
-plt.savefig("normal_distribution.png")
-
-###  Création du jeu de données proposé dans l'article 
-
-data = np.array([[0, 10, 1], [1, 25, 1], [0, 3, 2], [1, 6, 2]])
-df = pd.DataFrame(data, columns = ['Treat', 'Resp', 'Ind'])
-
-### représentation graphique du jeu de données proposé dans l'article 
-
-plt.style.use('ggplot')
-plt.scatter(df.Treat, df.Resp, c=df.Ind)
-plt.plot(df.Treat.iloc[0:2], df.Resp.iloc[0:2], '-', c='purple', label = '1')
-plt.plot(df.Treat[2:4], df.Resp.iloc[2:4], '-', c='yellow', label='2')
-plt.xlabel('Treat')
-plt.ylabel('Resp')
-plt.legend(title = 'Ind')
-plt.savefig("points.png")
-
-### modèle linéaire par régression des moindres carrés (OLS)
-
-results_ols = smf.ols('Resp ~ Treat', data=df).fit()
-results_ols.summary()
-
-# Le maximum de vraisemblance vaut -13.549
-# beta1 = 6.5 
-# beta2 = 6.5 + 9 = 15.5
+if not os.path.exists("./gifs"):
+    os.mkdir("./gifs")
 
 
-### Modèle Linéaire mixte par ML
-
-model_mixte_ml = smf.mixedlm("Resp ~ Treat", df, groups = df['Ind'])
-result_ml = model_mixte_ml.fit(reml=False)
-print(result_ml.summary())
-
-# Le maximum de vraisemblance vaut -13.0029
-# on trouve les mêmes valeurs de beta
-# de plus on note que sigma^2 = sqrt(18) = 4.24
-# sigma^2_s = sqrt(33.25) = 5.77
-
-
-### Modèle linéaire mixte par REML
-
-model_mixte_reml = smf.mixedlm('Resp ~ Treat', data=df, groups = df['Ind'])
-result_reml = model_mixte_reml.fit()
-result_reml.summary()
-
-# Le maximum de vraisemblance vaut -7.8877
-# la différence entre les deux vraisemblances est expliquée dans le rapport
-# on trouve les mêmes valeurs de beta
-# de plus on note que sigma^2 = sqrt(36) = 6
-# sigma^2_s = sqrt(66.5) = 8.15
+def pivot(m, m_evol, i):
+    n, _ = np.shape(m)
+    max = np.finfo(np.float64).eps
+    for r in range(i, n):
+        max_to_test = np.abs(m[r, i])
+        # print(max_to_test, max)
+        if max < max_to_test:
+            max_row = r
+            max = max_to_test
+        # print(max_row)
+    m[[i, max_row]] = m[[max_row, i]]  # raw swapping
+    m_evol[[i, max_row]] = m_evol[[max_row, i]]
 
 
-### Calcul de la log-vraisemblance
+def gaussian_elimination_with_pivot(m):
+    """
+    Parameters
+    ----------
+    m  : list of list of floats (matrix)
 
-def f(x):
-   sigma = x[0]
-   sigmas = x[1]
-   beta1 = 6.5
-   beta2 = 15.5
-   y11 = 3
-   y12 = 10
-   y21 = 6
-   y22 = 25
-   return(-(1/2)*np.log(4*sigmas**4*sigma**4 +
-                        4*sigmas**2*sigma**6 + sigma**8) -(1/2)*np.log(4/((sigma**2)*(sigma**2+2*sigmas**2)))- 
-          (1/2)*(1/((sigma**2)*(sigma**2+2*sigmas**2)))*(((y11-beta1)**2)*(sigma**2+sigmas**2) - 
-                                                         2*(y11-beta1)*(y21-beta2)*(sigmas**2) + 
-                                                         ((y21-beta2)**2)*(sigma**2+sigmas**2) + 
-                                                         ((y12-beta1)**2)*(sigma**2+sigmas**2) - 
-                                                         2*(y12-beta1)*(y22-beta2)*(sigmas**2) + 
-                                                         ((y22-beta2)**2)*(sigma**2+sigmas**2)))
+    Returns
+    -------
+    list of floats
+      solution to the system of linear equation
 
-### Maximisation de la log-vraisemblance
+    Raises
+    ------
+    ValueError
+      no unique solution
+    """
+    # forward elimination
+    n, _ = m.shape
+    liste_evol = []
+    liste_mat = []
+    liste_mat_elem = []
 
-sigma_chap=0 # on initialise \hat{\sigma^2}
-sigma_s_chap=0 # on initialise \hat{\sigma_s^2}
-LL = -10.0 # on initialise la log-vraisemblance
-liste = np.arange(-10, 10, 0.01) #on prend un pas de 0.01 pour sigma_s^2
-#un pas de 1 suffit pour sigma^2
-for x in range(-10,10):
-    for y in liste:
-        if LL < f([x,y]) : 
-           sigma_chap = x
-           sigma_s_chap = y
-           LL = f([x,y])
-    
-print("Le maximum de la log vraisemblance est",LL)
-print("sigma^2 vaut",sigma_chap, "et sigma_s^2 vaut",sigma_s_chap)
+    m_evol = np.eye(n)
 
-# On trouve les bonnes valeurs de sigma 
+    for i in range(n):
+        # ACTIVATE IF you want pivot.
+        # pivot(m, m_evol, i)
+        liste_mat.append(m.copy())
+        liste_evol.append(np.eye(n))
+        liste_mat_elem.append(np.eye(n))
+        for j in range(i + 1, n):
+            alpha = m[j, i] / m[i, i]
+            m[j, :] = m[j, :] - m[i, :] * alpha
+            m_evol[j, :] = m_evol[j, :] - m_evol[i, :] * alpha
+            m_elem = np.eye(n)
+            m_elem[j, i] = - alpha
+            liste_mat.append(m.copy())
+            liste_evol.append(m_evol.copy())
+            liste_mat_elem.append(m_elem.copy())
+
+    # if np.abs(m[n - 1, n - 1]) < np.finfo(np.float64).eps:
+    #     raise ValueError('No unique solution')
+
+    for i in range(n)[::-1]:
+        for j in range(0, i)[::-1]:
+            alpha = m[j, i] / m[i, i]
+            m[j, :] = m[j, :] - m[i, :] * alpha
+            m_evol[j, :] = m_evol[j, :] - m_evol[i, :] * alpha
+            m_elem = np.eye(n)
+            m_elem[j, i] = - alpha
+            liste_evol.append(m_evol.copy())
+            liste_mat.append(m.copy())
+            liste_mat_elem.append(m_elem.copy())
+    for i in range(n):
+        alpha = m[i, i]
+        m[i, i] = 1
+        liste_mat.append(m.copy())
+        m_elem = np.eye(n)
+        m_elem[i, i] = 1 / alpha
+        liste_mat_elem.append(m_elem.copy())
+        m_evol[i, :] = m_evol[i, :] / alpha
+        liste_evol.append(m_evol.copy())
+
+    # # backward substitution
+    # x = np.zeros(n, )
+    # for i in range(n - 1, -1, -1):
+    #     s = sum(m[i,j] * x[j] for j in range(i, n))
+    #     x[i] = (m[i,n] - s) / m[i,i]
+    return liste_mat, liste_evol, liste_mat_elem
+
+'''
+# shorter way to pivot but cannot run in trinket
+def pivot(m, n, i):
+  max_row = max(range(i, n), key=lambda r: abs(m[r,i]))
+  m[i], m[max_row] = m[max_row], m[i]
+'''
+
+
+def imaging(m):
+    m_init = m.copy()
+    liste_mat, liste_evol, liste_mat_elem = gaussian_elimination_with_pivot(m)
+    fig = plt.figure(figsize=(4, 4))
+    ax11 = fig.add_subplot(2, 2, 1)
+    ax12 = fig.add_subplot(2, 2, 2)
+    ax21 = fig.add_subplot(2, 2, 3)
+    ax22 = fig.add_subplot(2, 2, 4)
+    plt.show(block=False)
+    for i, matrix in enumerate(liste_mat):
+
+        ax11.set_axis_off()
+        ax11.imshow(liste_mat_elem[i], vmin=-3, vmax=3, cmap='RdBu')
+
+        ax21.set_axis_off()
+        ax21.imshow(liste_evol[i], vmin=-3, vmax=3, cmap='RdBu')
+
+        ax22.set_axis_off()
+        ax22.imshow(matrix, vmin=-3, vmax=3, cmap='RdBu')
+
+        ax12.set_axis_off()
+        ax12.imshow(m_init, vmin=-3, vmax=3, cmap='RdBu')
+
+        plt.savefig("gifs/gauss_pivot_%s.png" % str(i).zfill(3))
+
+        # plt.close()
+        print(i)
+    if save is True:
+        # files = []
+        files = ''
+        for i, matrix in enumerate(liste_mat):
+            # files.append('gifs/gauss_pivot_{}.png'.format(str(i).zfill(3)))
+            files = files + ' gifs/gauss_pivot_{}.png'.format(str(i).zfill(3))
+
+        # print(files)
+        print(files)
+        # command = 'convert -delay 5 {} -loop 100 gifs/gauss_pivot.gif'.format(' '.join(files))
+        job = 'convert -layers optimize -resize 400 -delay 6 {} -loop 3 gifs/gauss_pivot.gif'.format(files)
+        os.system(job)
+
+# n = 19
+n = 19
+# m = np.abs(np.random.randn(n, n) + np.eye(n))
+m = (np.random.randn(n, n) + np.eye(n))
+# m_init = m.copy()
+# print(m)
+# print(gaussian_elimination_with_pivot(m))
+
+fig1 = plt.figure()
+ax11 = fig1.add_subplot(1, 1, 1)
+ax11.imshow(np.linalg.inv(m), vmin=-3, vmax=3, cmap='RdBu')
+
+imaging(m)
+
